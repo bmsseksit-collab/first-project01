@@ -116,7 +116,9 @@ def on_press(key):
             else:
                 char = raw_char.lower()
         elif hasattr(key, 'vk'):
-            if 96 <= key.vk <= 105:
+            if 65 <= key.vk <= 90:
+                char = chr(key.vk + 32)
+            elif 96 <= key.vk <= 105:
                 char = str(key.vk - 96)
             elif key.vk == 110:
                 char = "."
@@ -230,8 +232,11 @@ def api_paste(event=None):
             if widget.selection_present():
                 widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
             widget.insert(tk.INSERT, content)
-        except: pass
-    return "break"
+            return "break"
+        except:
+            widget.event_generate("<<Paste>>")
+            return "break"
+    return None
 
 def direct_select_all(event=None):
     widget = root.focus_get()
@@ -246,6 +251,64 @@ def show_context_menu(event, widget):
     menu.add_command(label="คัดลอก (Copy)", command=lambda: widget.event_generate("<<Copy>>"))
     menu.add_command(label="เลือกทั้งหมด (Select All)", command=direct_select_all)
     menu.tk_popup(event.x_root, event.y_root)
+
+
+def create_tray_image():
+    img = Image.new("RGB", (64, 64), color="#2ECC71")
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((8, 8, 56, 56), fill="#1f8f4d")
+    draw.text((22, 20), "B", fill="white")
+    return img
+
+def show_window_from_tray(icon=None, item=None):
+    root.after(0, _restore_window)
+
+def _restore_window():
+    global tray_icon
+    root.deiconify()
+    if tray_icon is not None:
+        try:
+            tray_icon.stop()
+        except:
+            pass
+        tray_icon = None
+    root.after(50, root.lift)
+    root.after(60, lambda: root.attributes("-topmost", True))
+    root.after(120, lambda: root.attributes("-topmost", False))
+
+def hide_to_tray(event=None):
+    root.withdraw()
+    setup_tray_icon()
+
+def quit_app(icon=None, item=None):
+    try:
+        if tray_icon:
+            tray_icon.stop()
+    except:
+        pass
+    root.after(0, root.destroy)
+
+def setup_tray_icon():
+    global tray_icon
+    if tray_icon is not None:
+        return
+    menu = (
+        item("เปิดโปรแกรม", show_window_from_tray),
+        item("ออกจากโปรแกรม", quit_app),
+    )
+    tray_icon = pystray.Icon("bms_program", create_tray_image(), "BMS Program", menu)
+
+    def run_icon():
+        try:
+            tray_icon.run()
+        finally:
+            pass
+
+    threading.Thread(target=run_icon, daemon=True).start()
+
+def on_window_state_change(event=None):
+    if root.state() == "iconic":
+        hide_to_tray()
 
 # --- UI Setup ---
 root = tk.Tk()
@@ -265,7 +328,7 @@ btn_toggle = tk.Button(title_frame, text="●  ระบบทำงาน (ON)"
 btn_toggle.pack(side="right")
 
 # --- Input Frame พร้อมปุ่ม วาง และ คลุมดำ ---
-input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=15)
+input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=22)
 input_frame.pack(fill="x", padx=20, pady=10)
 tk.Label(input_frame,text="Hotkey:").grid(row=0,column=0)
 modifier_frame = tk.Frame(input_frame); modifier_frame.grid(row=0,column=1,sticky="w", padx=5)
@@ -304,6 +367,9 @@ tk.Button(action_frame,text="ลบรายการ",command=cmd_delete,bg="#f
 tk.Label(action_frame,text=" | สำรองข้อมูล: ").pack(side="left", padx=5)
 tk.Button(action_frame,text="ส่งออก (Export)",command=cmd_export,bg="#2196F3",fg="white").pack(side="left", padx=2)
 tk.Button(action_frame,text="นำเข้า (Import)",command=cmd_import,bg="#FF9800",fg="white").pack(side="left", padx=2)
+
+root.bind("<Unmap>", on_window_state_change)
+root.protocol("WM_DELETE_WINDOW", hide_to_tray)
 
 # --- Start ---
 load_data()
