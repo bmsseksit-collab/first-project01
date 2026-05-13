@@ -22,6 +22,8 @@ task_queue = queue.Queue()
 current_mods = set()
 current_key = ""
 tray_icon = None
+window_icon_image = None
+ui_action_queue = queue.Queue()
 
 # --- Load/Save ---
 def load_data():
@@ -254,14 +256,18 @@ def show_context_menu(event, widget):
 
 
 def create_tray_image():
-    img = Image.new("RGB", (64, 64), color="#2ECC71")
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.rectangle((8, 8, 56, 56), fill="#1f8f4d")
-    draw.text((22, 20), "B", fill="white")
+    draw.ellipse((8, 12, 56, 60), fill="#f4b183", outline="#6b3e26", width=2)
+    draw.polygon([(18, 16), (26, 4), (30, 20)], fill="#f4b183", outline="#6b3e26")
+    draw.polygon([(46, 16), (38, 4), (34, 20)], fill="#f4b183", outline="#6b3e26")
+    draw.ellipse((22, 30, 28, 36), fill="#2b2b2b")
+    draw.ellipse((36, 30, 42, 36), fill="#2b2b2b")
+    draw.polygon([(32, 40), (28, 45), (36, 45)], fill="#d95f5f")
     return img
 
 def show_window_from_tray(icon=None, item=None):
-    root.after(0, _restore_window)
+    ui_action_queue.put("restore")
 
 def _restore_window():
     global tray_icon
@@ -281,12 +287,7 @@ def hide_to_tray(event=None):
     setup_tray_icon()
 
 def quit_app(icon=None, item=None):
-    try:
-        if tray_icon:
-            tray_icon.stop()
-    except:
-        pass
-    root.after(0, root.destroy)
+    ui_action_queue.put("quit")
 
 def setup_tray_icon():
     global tray_icon
@@ -306,6 +307,23 @@ def setup_tray_icon():
 
     threading.Thread(target=run_icon, daemon=True).start()
 
+def process_ui_actions():
+    try:
+        while True:
+            action = ui_action_queue.get_nowait()
+            if action == "restore":
+                _restore_window()
+            elif action == "quit":
+                try:
+                    if tray_icon:
+                        tray_icon.stop()
+                except:
+                    pass
+                root.destroy()
+    except queue.Empty:
+        pass
+    root.after(100, process_ui_actions)
+
 def on_window_state_change(event=None):
     if root.state() == "iconic":
         hide_to_tray()
@@ -313,7 +331,9 @@ def on_window_state_change(event=None):
 # --- UI Setup ---
 root = tk.Tk()
 root.title("BMS Program")
-root.geometry("900x640")
+root.geometry("1080x720")
+window_icon_image = ImageTk.PhotoImage(create_tray_image())
+root.iconphoto(True, window_icon_image)
 
 # --- Bind Clipboard ---
 root.bind_class("Entry","<Control-v>", api_paste)
@@ -322,8 +342,11 @@ root.bind_class("Entry","<Control-a>", direct_select_all)
 root.bind_class("Entry","<Control-A>", direct_select_all)
 
 title_frame = tk.Frame(root)
-title_frame.pack(fill="x", padx=20, pady=(10,0))
-tk.Label(title_frame, text="BMS Program", font=("Segoe UI", 14, "bold")).pack(side="left", anchor="w")
+title_frame.pack(fill="x", padx=20, pady=(16,6))
+tk.Label(title_frame, text="BMS Program", font=("Segoe UI", 22, "bold"), fg="#1f2937").pack(side="left", anchor="w")
+cat_track = tk.Canvas(title_frame, width=420, height=32, bg="#f5f7fb", highlightthickness=0)
+cat_track.pack(side="left", padx=20, fill="x", expand=True)
+cat_sprite = cat_track.create_text(12, 16, text="🐈", font=("Segoe UI Emoji", 18))
 btn_toggle = tk.Button(title_frame, text="●  ระบบทำงาน (ON)", command=toggle_status, bg="#2ECC71", fg="white", width=20)
 btn_toggle.pack(side="right")
 
@@ -368,8 +391,24 @@ tk.Label(action_frame,text=" | สำรองข้อมูล: ").pack(side="
 tk.Button(action_frame,text="ส่งออก (Export)",command=cmd_export,bg="#2196F3",fg="white").pack(side="left", padx=2)
 tk.Button(action_frame,text="นำเข้า (Import)",command=cmd_import,bg="#FF9800",fg="white").pack(side="left", padx=2)
 
+def animate_cat(direction=1):
+    x, y = cat_track.coords(cat_sprite)
+    width = max(cat_track.winfo_width(), 50)
+    step = 4 * direction
+    if x >= width - 12:
+        direction = -1
+        step = -4
+    elif x <= 12:
+        direction = 1
+        step = 4
+    cat_track.move(cat_sprite, step, 0)
+    root.after(40, lambda: animate_cat(direction))
+
 root.bind("<Unmap>", on_window_state_change)
 root.protocol("WM_DELETE_WINDOW", hide_to_tray)
+
+process_ui_actions()
+animate_cat()
 
 # --- Start ---
 load_data()
