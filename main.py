@@ -1,0 +1,300 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import json
+from pynput import keyboard
+import time
+import os
+import threading
+import queue
+from PIL import Image, ImageDraw, ImageTk
+import pystray
+from pystray import MenuItem as item
+
+# --- Config ---
+kb_controller = keyboard.Controller()
+shortcuts = {}
+is_running = True
+current_keys = ""
+last_type_time = 0
+listener = None
+app_has_focus = False
+task_queue = queue.Queue()
+current_mods = set()
+current_key = ""
+tray_icon = None
+
+# --- Load/Save ---
+def load_data():
+    global shortcuts
+    if os.path.exists("autotext_config.json"):
+        try:
+            with open("autotext_config.json", 'r', encoding='utf-8') as f:
+                shortcuts = json.load(f)
+            refresh_table()
+        except: pass
+
+def save_data():
+    try:
+        with open("autotext_config.json", 'w', encoding='utf-8') as f:
+            json.dump(shortcuts, f, ensure_ascii=False, indent=4)
+    except: pass
+
+# --- Parse Hotkey ---
+def parse_hotkey(text):
+    parts = text.lower().split("+")
+    mods = []
+    key = ""
+    for p in parts:
+        p = p.strip()
+        if p in ["ctrl", "shift", "alt"]:
+            mods.append(p)
+        else:
+            key = p
+    return tuple(mods), key
+
+# --- Background execution ---
+def execute_action(shortcut, text):
+    try:
+        for k in [keyboard.Key.ctrl, keyboard.Key.shift, keyboard.Key.alt]:
+            kb_controller.release(k)
+        for _ in range(len(shortcut)):
+            kb_controller.press(keyboard.Key.backspace)
+            kb_controller.release(keyboard.Key.backspace)
+            time.sleep(0.01)
+        time.sleep(0.05)
+        kb_controller.type(text)
+    except Exception as e:
+        print(f"Error: {e}")
+
+def queue_worker():
+    while True:
+        task = task_queue.get()
+        if task is None: break
+        shortcut, text = task
+        execute_action(shortcut, text)
+        task_queue.task_done()
+
+threading.Thread(target=queue_worker, daemon=True).start()
+
+# --- Focus ---
+def check_focus_loop():
+    global app_has_focus
+    try:
+        app_has_focus = bool(root.focus_displayof())
+    except:
+        app_has_focus = False
+    root.after(200, check_focus_loop)
+
+# --- Listener ---
+def on_press(key):
+    global current_keys, last_type_time, current_mods, current_key
+    if key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
+        current_mods.add("ctrl")
+    elif key in [keyboard.Key.shift, keyboard.Key.shift_r]:
+        current_mods.add("shift")
+    elif key in [keyboard.Key.alt_l, keyboard.Key.alt_r]:
+        current_mods.add("alt")
+
+    if getattr(key, 'name', '') == 'f12' and "ctrl" in current_mods:
+        root.after(0, toggle_status)
+        return
+
+    if app_has_focus or not is_running:
+        return
+
+    try:
+        current_time = time.time()
+        if current_time - last_type_time > 1.0:
+            current_keys = ""
+        last_type_time = current_time
+
+        char = ""
+        if hasattr(key, 'char') and key.char is not None:
+            char = key.char.lower()
+        elif hasattr(key, 'vk'):
+            if 96 <= key.vk <= 105:
+                char = str(key.vk - 96)
+            elif key.vk == 110:
+                char = "."
+
+        if char == "ใ": char = "."
+
+        current_key = char
+        for hotkey_text, v in shortcuts.items():
+            mods, k = parse_hotkey(hotkey_text)
+            if k == current_key and set(mods) == current_mods:
+                task_queue.put((hotkey_text, v))
+                current_key = ""
+                return
+
+        if char:
+            current_keys += char
+            for k, v in shortcuts.items():
+                if current_keys.endswith(k):
+                    current_keys = ""
+                    task_queue.put((k, v))
+                    break
+        elif key == keyboard.Key.backspace:
+            current_keys = current_keys[:-1]
+        elif key in [keyboard.Key.space, keyboard.Key.enter, keyboard.Key.tab]:
+            current_keys = ""
+    except: pass
+
+def on_release(key):
+    global current_mods
+    if key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
+        current_mods.discard("ctrl")
+    elif key in [keyboard.Key.shift, keyboard.Key.shift_r]:
+        current_mods.discard("shift")
+    elif key in [keyboard.Key.alt_l, keyboard.Key.alt_r]:
+        current_mods.discard("alt")
+
+# --- UI Functions ---
+def toggle_status():
+    global is_running
+    is_running = not is_running
+    btn_toggle.config(text="●  ระบบทำงาน (ON)" if is_running else "○  ปิดระบบ (OFF)",
+                      bg="#2ECC71" if is_running else "#E74C3C")
+
+def cmd_add():
+    k = entry_kw.get().strip(); p = entry_ph.get().strip()
+    if not k or not p: return
+    mods = []
+    if var_ctrl.get(): mods.append("Ctrl")
+    if var_alt.get(): mods.append("Alt")
+    if var_shift.get(): mods.append("Shift")
+    k_full = "+".join(mods + [k.upper()]) if mods else k
+    shortcuts[k_full] = p
+    save_data()
+    refresh_table()
+    entry_kw.delete(0, tk.END)
+    entry_ph.delete(0, tk.END)
+    var_ctrl.set(False); var_alt.set(False); var_shift.set(False)
+
+def cmd_delete():
+    to_del = [tree.item(i, 'values')[1] for i in tree.get_children() if tree.item(i, 'values')[0]=="☑"]
+    if not to_del:
+        messagebox.showwarning("แจ้งเตือน", "กรุณาติ๊ก ☑ เลือกรายการก่อน")
+        return
+    for k in to_del:
+        shortcuts.pop(k, None)
+    save_data()
+    refresh_table()
+
+def cmd_export():
+    f = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON","*.json")])
+    if f:
+        with open(f,'w',encoding='utf-8') as file:
+            json.dump(shortcuts, file, ensure_ascii=False, indent=4)
+
+def cmd_import():
+    f = filedialog.askopenfilename(filetypes=[("JSON","*.json")])
+    if f:
+        with open(f,'r',encoding='utf-8-sig') as file:
+            shortcuts.update(json.load(file))
+        save_data()
+        refresh_table()
+
+def refresh_table():
+    for i in tree.get_children():
+        tree.delete(i)
+    for k,v in shortcuts.items():
+        tree.insert("",tk.END,values=("☐",k,v))
+
+def on_tree_select(event):
+    sel = tree.selection()
+    if sel:
+        item = tree.item(sel[0], 'values')
+        entry_kw.delete(0, tk.END)
+        entry_kw.insert(0, item[1].split('+')[-1])  # แก้ไข Key ให้ไม่ซ้ำ modifier
+        entry_ph.delete(0, tk.END)
+        entry_ph.insert(0, item[2])
+        mods, key = parse_hotkey(item[1])
+        var_ctrl.set("ctrl" in mods)
+        var_alt.set("alt" in mods)
+        var_shift.set("shift" in mods)
+
+def toggle_check(row):
+    v = tree.item(row,'values')
+    tree.item(row, values=("☑" if v[0]=="☐" else "☐", v[1], v[2]))
+
+def api_paste(event=None):
+    widget = root.focus_get()
+    if isinstance(widget, tk.Entry):
+        try:
+            content = root.clipboard_get()
+            if widget.selection_present():
+                widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            widget.insert(tk.INSERT, content)
+        except: pass
+    return "break"
+
+def direct_select_all(event=None):
+    widget = root.focus_get()
+    if isinstance(widget, tk.Entry):
+        widget.select_range(0, tk.END)
+        widget.icursor(tk.END)
+    return "break"
+
+def show_context_menu(event, widget):
+    menu = tk.Menu(root, tearoff=0)
+    menu.add_command(label="วาง (Paste)", command=api_paste)
+    menu.add_command(label="คัดลอก (Copy)", command=lambda: widget.event_generate("<<Copy>>"))
+    menu.add_command(label="เลือกทั้งหมด (Select All)", command=direct_select_all)
+    menu.tk_popup(event.x_root, event.y_root)
+
+# --- UI Setup ---
+root = tk.Tk()
+root.title("BMS AutoText Pro - Ultimate Edition")
+root.geometry("900x720")
+
+# --- Bind Clipboard ---
+root.bind_class("Entry","<Control-v>", api_paste)
+root.bind_class("Entry","<Control-V>", api_paste)
+root.bind_class("Entry","<Control-a>", direct_select_all)
+root.bind_class("Entry","<Control-A>", direct_select_all)
+
+# --- Input Frame พร้อมปุ่ม วาง และ คลุมดำ ---
+input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=15)
+input_frame.pack(fill="x", padx=20, pady=10)
+tk.Label(input_frame,text="Key:").grid(row=0,column=0)
+entry_kw = tk.Entry(input_frame,width=10); entry_kw.grid(row=0,column=1,padx=5)
+
+modifier_frame = tk.Frame(input_frame); modifier_frame.grid(row=0,column=2,sticky="w", padx=5)
+var_ctrl = tk.BooleanVar(); var_alt = tk.BooleanVar(); var_shift = tk.BooleanVar()
+tk.Checkbutton(modifier_frame,text="Ctrl",variable=var_ctrl).pack(side="left")
+tk.Checkbutton(modifier_frame,text="Alt",variable=var_alt).pack(side="left")
+tk.Checkbutton(modifier_frame,text="Shift",variable=var_shift).pack(side="left")
+
+tk.Label(input_frame,text="ข้อความ:").grid(row=0,column=3)
+entry_ph = tk.Entry(input_frame,width=35); entry_ph.grid(row=0,column=4,padx=5)
+tk.Button(input_frame,text="วาง", command=api_paste,bg="#2196F3",fg="white",width=6).grid(row=0,column=5,padx=2)
+tk.Button(input_frame,text="คลุมดำ", command=direct_select_all,bg="#9C27B0",fg="white",width=6).grid(row=0,column=6,padx=2)
+tk.Button(input_frame,text="บันทึก",command=cmd_add,bg="#4CAF50",fg="white",width=8).grid(row=0,column=7,padx=5)
+
+# --- Treeview + Action Buttons ---
+tree_frame = tk.Frame(root); tree_frame.pack(fill="both",expand=True,padx=20)
+tree = ttk.Treeview(tree_frame,columns=("check","kw","ph"),show="headings")
+tree.heading("check",text="เลือก"); tree.heading("kw",text="คำย่อ"); tree.heading("ph",text="ข้อความเต็ม")
+tree.column("check",width=50,anchor="center"); tree.column("kw",width=140); tree.column("ph",width=580)
+sb = ttk.Scrollbar(tree_frame,orient="vertical",command=tree.yview); tree.configure(yscrollcommand=sb.set)
+tree.pack(side="left",fill="both",expand=True); sb.pack(side="right",fill="y") 
+tree.bind('<<TreeviewSelect>>',on_tree_select)
+tree.bind('<Button-1>', lambda e: root.after(10, lambda: toggle_check(tree.identify_row(e.y))))
+
+select_frame = tk.Frame(root,pady=5); select_frame.pack(fill="x", padx=20)
+tk.Button(select_frame,text="เลือกทั้งหมด",command=lambda:[tree.item(i,values=("☑",tree.item(i,'values')[1],tree.item(i,'values')[2])) for i in tree.get_children()]).pack(side="left",padx=2)
+tk.Button(select_frame,text="ยกเลิกการเลือก",command=lambda:[tree.item(i,values=("☐",tree.item(i,'values')[1],tree.item(i,'values')[2])) for i in tree.get_children()]).pack(side="left",padx=2)
+
+action_frame = tk.Frame(root,pady=10); action_frame.pack(fill="x", padx=20)
+tk.Button(action_frame,text="ลบรายการ",command=cmd_delete,bg="#f44336",fg="white",width=12).pack(side="left")
+tk.Label(action_frame,text=" | สำรองข้อมูล: ").pack(side="left", padx=5)
+tk.Button(action_frame,text="ส่งออก (Export)",command=cmd_export,bg="#2196F3",fg="white").pack(side="left", padx=2)
+tk.Button(action_frame,text="นำเข้า (Import)",command=cmd_import,bg="#FF9800",fg="white").pack(side="left", padx=2)
+
+# --- Start ---
+load_data()
+check_focus_loop()
+listener = keyboard.Listener(on_press=on_press,on_release=on_release)
+listener.start()
+root.mainloop()
