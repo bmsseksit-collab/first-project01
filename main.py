@@ -245,8 +245,8 @@ def show_context_menu(event, widget):
 
 # --- UI Setup ---
 root = tk.Tk()
-root.title("BMS AutoText Pro - Ultimate Edition")
-root.geometry("900x720")
+root.title("BMS Program")
+root.geometry("900x640")
 
 # --- Bind Clipboard ---
 root.bind_class("Entry","<Control-v>", api_paste)
@@ -254,10 +254,14 @@ root.bind_class("Entry","<Control-V>", api_paste)
 root.bind_class("Entry","<Control-a>", direct_select_all)
 root.bind_class("Entry","<Control-A>", direct_select_all)
 
-# --- Input Frame พร้อมปุ่ม วาง และ คลุมดำ ---
+title_frame = tk.Frame(root)
+title_frame.pack(fill="x", padx=20, pady=(10,0))
+tk.Label(title_frame, text="BMS Program", font=("Segoe UI", 14, "bold")).pack(anchor="w")
+
+
 input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=15)
 input_frame.pack(fill="x", padx=20, pady=10)
-tk.Label(input_frame,text="Key:").grid(row=0,column=0)
+tk.Label(input_frame,text="Hotkey:").grid(row=0,column=0)
 entry_kw = tk.Entry(input_frame,width=10); entry_kw.grid(row=0,column=1,padx=5)
 
 modifier_frame = tk.Frame(input_frame); modifier_frame.grid(row=0,column=2,sticky="w", padx=5)
@@ -266,7 +270,7 @@ tk.Checkbutton(modifier_frame,text="Ctrl",variable=var_ctrl).pack(side="left")
 tk.Checkbutton(modifier_frame,text="Alt",variable=var_alt).pack(side="left")
 tk.Checkbutton(modifier_frame,text="Shift",variable=var_shift).pack(side="left")
 
-tk.Label(input_frame,text="ข้อความ:").grid(row=0,column=3)
+tk.Label(input_frame,text="Keyword:").grid(row=0,column=3)
 entry_ph = tk.Entry(input_frame,width=35); entry_ph.grid(row=0,column=4,padx=5)
 tk.Button(input_frame,text="วาง", command=api_paste,bg="#2196F3",fg="white",width=6).grid(row=0,column=5,padx=2)
 tk.Button(input_frame,text="คลุมดำ", command=direct_select_all,bg="#9C27B0",fg="white",width=6).grid(row=0,column=6,padx=2)
@@ -274,8 +278,8 @@ tk.Button(input_frame,text="บันทึก",command=cmd_add,bg="#4CAF50",fg=
 
 # --- Treeview + Action Buttons ---
 tree_frame = tk.Frame(root); tree_frame.pack(fill="both",expand=True,padx=20)
-tree = ttk.Treeview(tree_frame,columns=("check","kw","ph"),show="headings")
-tree.heading("check",text="เลือก"); tree.heading("kw",text="คำย่อ"); tree.heading("ph",text="ข้อความเต็ม")
+tree = ttk.Treeview(tree_frame,columns=("check","kw","ph"),show="headings", height=16)
+tree.heading("check",text="เลือก"); tree.heading("kw",text="Hotkey"); tree.heading("ph",text="Keyword")
 tree.column("check",width=50,anchor="center"); tree.column("kw",width=140); tree.column("ph",width=580)
 sb = ttk.Scrollbar(tree_frame,orient="vertical",command=tree.yview); tree.configure(yscrollcommand=sb.set)
 tree.pack(side="left",fill="both",expand=True); sb.pack(side="right",fill="y") 
@@ -285,6 +289,11 @@ tree.bind('<Button-1>', lambda e: root.after(10, lambda: toggle_check(tree.ident
 select_frame = tk.Frame(root,pady=5); select_frame.pack(fill="x", padx=20)
 tk.Button(select_frame,text="เลือกทั้งหมด",command=lambda:[tree.item(i,values=("☑",tree.item(i,'values')[1],tree.item(i,'values')[2])) for i in tree.get_children()]).pack(side="left",padx=2)
 tk.Button(select_frame,text="ยกเลิกการเลือก",command=lambda:[tree.item(i,values=("☐",tree.item(i,'values')[1],tree.item(i,'values')[2])) for i in tree.get_children()]).pack(side="left",padx=2)
+
+status_frame = tk.Frame(root,pady=5); status_frame.pack(fill="x", padx=20)
+btn_toggle = tk.Button(status_frame, text="●  ระบบทำงาน (ON)", command=toggle_status, bg="#2ECC71", fg="white", width=20)
+btn_toggle.pack(side="left")
+tk.Label(status_frame, text="   (Ctrl+F12 = เปิด/ปิดด่วน)").pack(side="left")
 
 action_frame = tk.Frame(root,pady=10); action_frame.pack(fill="x", padx=20)
 tk.Button(action_frame,text="ลบรายการ",command=cmd_delete,bg="#f44336",fg="white",width=12).pack(side="left")
