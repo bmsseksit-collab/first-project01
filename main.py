@@ -110,7 +110,11 @@ def on_press(key):
 
         char = ""
         if hasattr(key, 'char') and key.char is not None:
-            char = key.char.lower()
+            raw_char = key.char
+            if len(raw_char) == 1 and 1 <= ord(raw_char) <= 26:
+                char = chr(ord('a') + ord(raw_char) - 1)
+            else:
+                char = raw_char.lower()
         elif hasattr(key, 'vk'):
             if 96 <= key.vk <= 105:
                 char = str(key.vk - 96)
@@ -256,15 +260,17 @@ root.bind_class("Entry","<Control-A>", direct_select_all)
 
 title_frame = tk.Frame(root)
 title_frame.pack(fill="x", padx=20, pady=(10,0))
-tk.Label(title_frame, text="BMS Program", font=("Segoe UI", 14, "bold")).pack(anchor="w")
+tk.Label(title_frame, text="BMS Program", font=("Segoe UI", 14, "bold")).pack(side="left", anchor="w")
+btn_toggle = tk.Button(title_frame, text="●  ระบบทำงาน (ON)", command=toggle_status, bg="#2ECC71", fg="white", width=20)
+btn_toggle.pack(side="right")
 
-
+# --- Input Frame พร้อมปุ่ม วาง และ คลุมดำ ---
 input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=15)
 input_frame.pack(fill="x", padx=20, pady=10)
 tk.Label(input_frame,text="Hotkey:").grid(row=0,column=0)
-entry_kw = tk.Entry(input_frame,width=10); entry_kw.grid(row=0,column=1,padx=5)
+modifier_frame = tk.Frame(input_frame); modifier_frame.grid(row=0,column=1,sticky="w", padx=5)
 
-modifier_frame = tk.Frame(input_frame); modifier_frame.grid(row=0,column=2,sticky="w", padx=5)
+entry_kw = tk.Entry(input_frame,width=10); entry_kw.grid(row=0,column=2,padx=5)
 var_ctrl = tk.BooleanVar(); var_alt = tk.BooleanVar(); var_shift = tk.BooleanVar()
 tk.Checkbutton(modifier_frame,text="Ctrl",variable=var_ctrl).pack(side="left")
 tk.Checkbutton(modifier_frame,text="Alt",variable=var_alt).pack(side="left")
@@ -291,9 +297,7 @@ tk.Button(select_frame,text="เลือกทั้งหมด",command=lambd
 tk.Button(select_frame,text="ยกเลิกการเลือก",command=lambda:[tree.item(i,values=("☐",tree.item(i,'values')[1],tree.item(i,'values')[2])) for i in tree.get_children()]).pack(side="left",padx=2)
 
 status_frame = tk.Frame(root,pady=5); status_frame.pack(fill="x", padx=20)
-btn_toggle = tk.Button(status_frame, text="●  ระบบทำงาน (ON)", command=toggle_status, bg="#2ECC71", fg="white", width=20)
-btn_toggle.pack(side="left")
-tk.Label(status_frame, text="   (Ctrl+F12 = เปิด/ปิดด่วน)").pack(side="left")
+tk.Label(status_frame, text="(Ctrl+F12 = เปิด/ปิดด่วน)").pack(side="left")
 
 action_frame = tk.Frame(root,pady=10); action_frame.pack(fill="x", padx=20)
 tk.Button(action_frame,text="ลบรายการ",command=cmd_delete,bg="#f44336",fg="white",width=12).pack(side="left")
