@@ -29,6 +29,33 @@ tray_icon = None
 window_icon_image = None
 ui_action_queue = queue.Queue()
 
+
+def win32_filter(msg, data):
+    """
+    บล็อก Ctrl+1..9 ไม่ให้ Chrome/Browser เอาไปสลับแท็บ
+    แล้วส่งเข้า shortcut ของเราแทน
+    """
+    try:
+        if os.name != "nt":
+            return
+        vk = getattr(data, "vkCode", None)
+        if vk is None:
+            return
+        # 0x31..0x39 = 1..9
+        if 0x31 <= vk <= 0x39:
+            ctrl_pressed = bool(ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000)
+            if not ctrl_pressed:
+                return
+            key_num = str(vk - 0x30)
+            hotkey_name = f"ctrl+{key_num}"
+            if hotkey_name in shortcuts and is_running and not app_has_focus:
+                try:
+                    listener.suppress_event()
+                except Exception:
+                    pass
+                task_queue.put((hotkey_name, shortcuts[hotkey_name]))
+    except Exception:
+        pass
 # --- Load/Save ---
 def load_data():
     global shortcuts
@@ -329,6 +356,8 @@ def on_press(key):
                 char = str(key.vk - 96)
             elif key.vk == 110:
                 char = "."
+            elif key.vk in (191, 111):   # / และ numpad /
+                char = "/"
 
         if char == "ใ": char = "."
 
@@ -534,7 +563,7 @@ def setup_tray_icon():
     if tray_icon is not None:
         return
     menu = (
-        item("เปิดโปรแกรม", show_window_from_tray),
+        item("เปิดโปรแกรม", show_window_from_tray, default=True),
         item("ออกจากโปรแกรม", quit_app),
     )
     tray_icon = pystray.Icon("bms_program", create_tray_image(), "BMS Program", menu)
