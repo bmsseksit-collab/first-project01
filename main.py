@@ -21,6 +21,8 @@ app_has_focus = False
 task_queue = queue.Queue()
 current_mods = set()
 current_key = ""
+last_triggered_shortcut = ""
+last_trigger_time = 0
 tray_icon = None
 window_icon_image = None
 ui_action_queue = queue.Queue()
@@ -89,7 +91,7 @@ def check_focus_loop():
 
 # --- Listener ---
 def on_press(key):
-    global current_keys, last_type_time, current_mods, current_key
+    global current_keys, last_type_time, current_mods, current_key, last_triggered_shortcut, last_trigger_time
     if key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
         current_mods.add("ctrl")
     elif key in [keyboard.Key.shift, keyboard.Key.shift_r]:
@@ -128,20 +130,33 @@ def on_press(key):
         if char == "ใ": char = "."
 
         current_key = char
+        
+        def can_trigger(shortcut_key):
+            nonlocal current_time
+            global last_triggered_shortcut, last_trigger_time
+            if last_triggered_shortcut == shortcut_key and (current_time - last_trigger_time) < 0.35:
+                return False
+            last_triggered_shortcut = shortcut_key
+            last_trigger_time = current_time
+            return True
+
         for hotkey_text, v in shortcuts.items():
             mods, k = parse_hotkey(hotkey_text)
             if k == current_key and set(mods) == current_mods:
-                task_queue.put((hotkey_text, v))
-                current_key = ""
-                return
+                if can_trigger(hotkey_text):
+                    task_queue.put((hotkey_text, v))
+                    current_key = ""
+                    current_keys = ""
+                    return
 
         if char:
             current_keys += char
             for k, v in shortcuts.items():
                 if current_keys.endswith(k):
-                    current_keys = ""
-                    task_queue.put((k, v))
-                    break
+                    if can_trigger(k):
+                        current_keys = ""
+                        task_queue.put((k, v))
+                        break
         elif key == keyboard.Key.backspace:
             current_keys = current_keys[:-1]
         elif key in [keyboard.Key.space, keyboard.Key.enter, keyboard.Key.tab]:
@@ -332,6 +347,7 @@ def on_window_state_change(event=None):
 root = tk.Tk()
 root.title("BMS Program")
 root.geometry("1080x720")
+root.minsize(900, 620)
 window_icon_image = ImageTk.PhotoImage(create_tray_image())
 root.iconphoto(True, window_icon_image)
 
@@ -353,17 +369,20 @@ btn_toggle.pack(side="right")
 # --- Input Frame พร้อมปุ่ม วาง และ คลุมดำ ---
 input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=22)
 input_frame.pack(fill="x", padx=20, pady=10)
+input_frame.grid_columnconfigure(2, weight=1)
+input_frame.grid_columnconfigure(4, weight=3)
+input_frame.grid_columnconfigure(7, weight=0)
 tk.Label(input_frame,text="Hotkey:").grid(row=0,column=0)
 modifier_frame = tk.Frame(input_frame); modifier_frame.grid(row=0,column=1,sticky="w", padx=5)
 
-entry_kw = tk.Entry(input_frame,width=10); entry_kw.grid(row=0,column=2,padx=5)
+entry_kw = tk.Entry(input_frame,width=10); entry_kw.grid(row=0,column=2,padx=5, sticky="ew")
 var_ctrl = tk.BooleanVar(); var_alt = tk.BooleanVar(); var_shift = tk.BooleanVar()
 tk.Checkbutton(modifier_frame,text="Ctrl",variable=var_ctrl).pack(side="left")
 tk.Checkbutton(modifier_frame,text="Alt",variable=var_alt).pack(side="left")
 tk.Checkbutton(modifier_frame,text="Shift",variable=var_shift).pack(side="left")
 
 tk.Label(input_frame,text="Keyword:").grid(row=0,column=3)
-entry_ph = tk.Entry(input_frame,width=35); entry_ph.grid(row=0,column=4,padx=5)
+entry_ph = tk.Entry(input_frame,width=35); entry_ph.grid(row=0,column=4,padx=5, sticky="ew")
 tk.Button(input_frame,text="วาง", command=api_paste,bg="#2196F3",fg="white",width=6).grid(row=0,column=5,padx=2)
 tk.Button(input_frame,text="คลุมดำ", command=direct_select_all,bg="#9C27B0",fg="white",width=6).grid(row=0,column=6,padx=2)
 tk.Button(input_frame,text="บันทึก",command=cmd_add,bg="#4CAF50",fg="white",width=8).grid(row=0,column=7,padx=5)
@@ -372,7 +391,7 @@ tk.Button(input_frame,text="บันทึก",command=cmd_add,bg="#4CAF50",fg=
 tree_frame = tk.Frame(root); tree_frame.pack(fill="both",expand=True,padx=20)
 tree = ttk.Treeview(tree_frame,columns=("check","kw","ph"),show="headings", height=16)
 tree.heading("check",text="เลือก"); tree.heading("kw",text="Hotkey"); tree.heading("ph",text="Keyword")
-tree.column("check",width=50,anchor="center"); tree.column("kw",width=140); tree.column("ph",width=580)
+tree.column("check",width=50,anchor="center", stretch=False); tree.column("kw",width=180, stretch=True); tree.column("ph",width=720, stretch=True)
 sb = ttk.Scrollbar(tree_frame,orient="vertical",command=tree.yview); tree.configure(yscrollcommand=sb.set)
 tree.pack(side="left",fill="both",expand=True); sb.pack(side="right",fill="y") 
 tree.bind('<<TreeviewSelect>>',on_tree_select)
