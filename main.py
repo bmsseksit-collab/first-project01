@@ -181,11 +181,22 @@ def on_release(key):
         current_mods.discard("alt")
 
 # --- UI Functions ---
-def toggle_status():
+def draw_toggle_switch():
+    toggle_canvas.delete("all")
+
+    bg = "#4ade80" if is_running else "#d1d5db"
+
+    toggle_canvas.create_oval(10, 10, 42, 42, fill=bg, outline=bg)
+    toggle_canvas.create_oval(78, 10, 110, 42, fill=bg, outline=bg)
+    toggle_canvas.create_rectangle(26, 10, 94, 42, fill=bg, outline=bg)
+
+    knob_x = 92 if is_running else 28
+    toggle_canvas.create_oval(knob_x - 14, 14, knob_x + 14, 38, fill="white", outline="#e5e7eb")
+
+def toggle_status(event=None):
     global is_running
     is_running = not is_running
-    btn_toggle.config(text="●  ระบบทำงาน (ON)" if is_running else "○  ปิดระบบ (OFF)",
-                      bg="#2ECC71" if is_running else "#E74C3C")
+    draw_toggle_switch()
 
 def cmd_add():
     k = entry_kw.get().strip(); p = entry_ph.get().strip()
@@ -384,8 +395,16 @@ tk.Label(title_frame, text="BMS Program", font=("Segoe UI", 22, "bold"), fg="#1f
 cat_track = tk.Canvas(title_frame, width=420, height=32, bg="#f5f7fb", highlightthickness=0)
 cat_track.pack(side="left", padx=20, fill="x", expand=True)
 cat_sprite = cat_track.create_text(12, 16, text="🐈", font=("Segoe UI Emoji", 18))
-btn_toggle = tk.Button(title_frame, text="●  ระบบทำงาน (ON)", command=toggle_status, bg="#16a34a", fg="white", activebackground="#15803d", relief="flat", width=20)
-btn_toggle.pack(side="right")
+status_block = tk.Frame(title_frame, bg="#eef2f7")
+status_block.pack(side="right", padx=(10, 0))
+
+tk.Label(status_block, text="สถานะระบบ", font=("Segoe UI", 11, "bold"), fg="#111827", bg="#eef2f7").pack(anchor="w")
+tk.Label(status_block, text="เปิด / ปิด (กด Ctrl+F12)", font=("Segoe UI", 9), fg="#6b7280", bg="#eef2f7").pack(anchor="w", pady=(0, 4))
+
+toggle_canvas = tk.Canvas(status_block, width=120, height=52, bg="#eef2f7", highlightthickness=0, bd=0)
+toggle_canvas.pack(anchor="w")
+toggle_canvas.bind("<Button-1>", toggle_status)
+draw_toggle_switch()
 
 # --- Input Frame พร้อมปุ่ม วาง และ คลุมดำ ---
 input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=22, bg="#f8fafc", fg="#1f2937")
