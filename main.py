@@ -156,7 +156,7 @@ def send_unicode_text(text):
         inputs.append(Input(INPUT_KEYBOARD, up_union))
 
     arr = (Input * len(inputs))(*inputs)
-    ctypes.windll.user32.SendInput(len(arr), ctypes.byref(arr), ctypes.sizeof(Input))
+    ctypes.windll.user32.SendInput(len(arr), arr, ctypes.sizeof(Input))
 
 
 # --- Background execution ---
@@ -171,7 +171,8 @@ def execute_action(shortcut, text):
         time.sleep(0.01)
         lines = text.split("\n")
         for idx, line in enumerate(lines):
-            send_unicode_text(line)
+            for ch in line:
+                send_unicode_char(ch)
             if idx < len(lines) - 1:
                 kb_controller.press(keyboard.Key.shift)
                 kb_controller.press(keyboard.Key.enter)
