@@ -7,6 +7,7 @@ import os
 import threading
 import queue
 import ctypes
+import pyperclip
 from PIL import Image, ImageDraw, ImageTk
 import pystray
 from pystray import MenuItem as item
@@ -165,7 +166,18 @@ def paste_text_fast(text):
     # เร็วและแม่นสุด: วางทั้งก้อนผ่าน clipboard แล้วกด Ctrl+V
     if os.name != "nt":
         kb_controller.type(text)
-        return
+        return True
+
+    # ใช้ pyperclip ก่อน (เสถียรกว่า WinAPI ดิบในหลายเครื่อง)
+    try:
+        pyperclip.copy(text)
+        kb_controller.press(keyboard.Key.ctrl)
+        kb_controller.press('v')
+        kb_controller.release('v')
+        kb_controller.release(keyboard.Key.ctrl)
+        return True
+    except Exception:
+        pass
 
     CF_UNICODETEXT = 13
     GMEM_MOVEABLE = 0x0002
