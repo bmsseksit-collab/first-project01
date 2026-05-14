@@ -243,17 +243,9 @@ def execute_action(shortcut, text):
             time.sleep(0.001)
         time.sleep(0.003)
         if is_line_window_active():
-            # Line OA: ใช้พิมพ์ Unicode ตรงเพื่อให้ติดชัวร์
-            lines = text.split("\n")
-            for idx, line in enumerate(lines):
-                for ch in line:
-                    send_unicode_char(ch)
-                    time.sleep(0.001)
-                if idx < len(lines) - 1:
-                    kb_controller.press(keyboard.Key.shift)
-                    kb_controller.press(keyboard.Key.enter)
-                    kb_controller.release(keyboard.Key.enter)
-                    kb_controller.release(keyboard.Key.shift)
+            # Line OA: ใช้สูตรเก่าที่เสถียรสุด (simulate typing ตรง)
+            time.sleep(0.05)
+            kb_controller.type(text)
         else:
             # แอปอื่น: ใช้ paste ทางลัดเพื่อความเร็วสูง
             if not paste_text_fast(text):
