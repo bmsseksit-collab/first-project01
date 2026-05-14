@@ -66,7 +66,14 @@ def execute_action(shortcut, text):
             kb_controller.release(keyboard.Key.backspace)
             time.sleep(0.01)
         time.sleep(0.05)
-        kb_controller.type(text)
+        for ch in text:
+            if ch == "\n":
+                kb_controller.press(keyboard.Key.shift)
+                kb_controller.press(keyboard.Key.enter)
+                kb_controller.release(keyboard.Key.enter)
+                kb_controller.release(keyboard.Key.shift)
+            else:
+                kb_controller.type(ch)
     except Exception as e:
         print(f"Error: {e}")
 
@@ -151,9 +158,10 @@ def on_press(key):
 
         if char:
             current_keys += char
-            for k, v in shortcuts.items():
+            ordered_shortcuts = sorted(shortcuts.items(), key=lambda kv: len(kv[0]), reverse=True)
+            for k, v in ordered_shortcuts:
                 if current_keys.endswith(k):
-                    if can_trigger(k):
+                     if can_trigger(k):
                         current_keys = ""
                         task_queue.put((k, v))
                         break
@@ -255,6 +263,16 @@ def api_paste(event=None):
             return "break"
     return None
 
+def api_copy(event=None):
+    widget = root.focus_get()
+    if isinstance(widget, tk.Entry):
+        try:
+            widget.event_generate("<<Copy>>")
+            return "break"
+        except:
+            return None
+    return None
+
 def direct_select_all(event=None):
     widget = root.focus_get()
     if isinstance(widget, tk.Entry):
@@ -346,6 +364,7 @@ def on_window_state_change(event=None):
 # --- UI Setup ---
 root = tk.Tk()
 root.title("BMS Program")
+root.configure(bg="#eef2f7")
 root.geometry("1080x720")
 root.minsize(900, 620)
 window_icon_image = ImageTk.PhotoImage(create_tray_image())
@@ -356,36 +375,45 @@ root.bind_class("Entry","<Control-v>", api_paste)
 root.bind_class("Entry","<Control-V>", api_paste)
 root.bind_class("Entry","<Control-a>", direct_select_all)
 root.bind_class("Entry","<Control-A>", direct_select_all)
+root.bind_class("Entry","<Control-c>", api_copy)
+root.bind_class("Entry","<Control-C>", api_copy)
 
-title_frame = tk.Frame(root)
+title_frame = tk.Frame(root, bg="#eef2f7")
 title_frame.pack(fill="x", padx=20, pady=(16,6))
 tk.Label(title_frame, text="BMS Program", font=("Segoe UI", 22, "bold"), fg="#1f2937").pack(side="left", anchor="w")
 cat_track = tk.Canvas(title_frame, width=420, height=32, bg="#f5f7fb", highlightthickness=0)
 cat_track.pack(side="left", padx=20, fill="x", expand=True)
 cat_sprite = cat_track.create_text(12, 16, text="🐈", font=("Segoe UI Emoji", 18))
-btn_toggle = tk.Button(title_frame, text="●  ระบบทำงาน (ON)", command=toggle_status, bg="#2ECC71", fg="white", width=20)
+btn_toggle = tk.Button(title_frame, text="●  ระบบทำงาน (ON)", command=toggle_status, bg="#16a34a", fg="white", activebackground="#15803d", relief="flat", width=20)
 btn_toggle.pack(side="right")
 
 # --- Input Frame พร้อมปุ่ม วาง และ คลุมดำ ---
-input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=22)
+input_frame = tk.LabelFrame(root,text="จัดการคำสั่ง", padx=15, pady=22, bg="#f8fafc", fg="#1f2937")
 input_frame.pack(fill="x", padx=20, pady=10)
 input_frame.grid_columnconfigure(2, weight=1)
-input_frame.grid_columnconfigure(4, weight=3)
+input_frame.grid_columnconfigure(4, weight=5)
 input_frame.grid_columnconfigure(7, weight=0)
 tk.Label(input_frame,text="Hotkey:").grid(row=0,column=0)
 modifier_frame = tk.Frame(input_frame); modifier_frame.grid(row=0,column=1,sticky="w", padx=5)
 
-entry_kw = tk.Entry(input_frame,width=10); entry_kw.grid(row=0,column=2,padx=5, sticky="ew")
+entry_kw = tk.Entry(input_frame,width=8); entry_kw.grid(row=0,column=2,padx=5, sticky="ew")
 var_ctrl = tk.BooleanVar(); var_alt = tk.BooleanVar(); var_shift = tk.BooleanVar()
 tk.Checkbutton(modifier_frame,text="Ctrl",variable=var_ctrl).pack(side="left")
 tk.Checkbutton(modifier_frame,text="Alt",variable=var_alt).pack(side="left")
 tk.Checkbutton(modifier_frame,text="Shift",variable=var_shift).pack(side="left")
 
 tk.Label(input_frame,text="Keyword:").grid(row=0,column=3)
-entry_ph = tk.Entry(input_frame,width=35); entry_ph.grid(row=0,column=4,padx=5, sticky="ew")
-tk.Button(input_frame,text="วาง", command=api_paste,bg="#2196F3",fg="white",width=6).grid(row=0,column=5,padx=2)
-tk.Button(input_frame,text="คลุมดำ", command=direct_select_all,bg="#9C27B0",fg="white",width=6).grid(row=0,column=6,padx=2)
-tk.Button(input_frame,text="บันทึก",command=cmd_add,bg="#4CAF50",fg="white",width=8).grid(row=0,column=7,padx=5)
+entry_ph = tk.Entry(input_frame,width=50); entry_ph.grid(row=0,column=4,padx=5, sticky="ew")
+for ent in (entry_kw, entry_ph):
+    ent.bind("<Control-v>", api_paste)
+    ent.bind("<Control-V>", api_paste)
+    ent.bind("<Control-a>", direct_select_all)
+    ent.bind("<Control-A>", direct_select_all)
+    ent.bind("<Control-c>", api_copy)
+    ent.bind("<Control-C>", api_copy)
+tk.Button(input_frame,text="วาง", command=api_paste,bg="#2563eb",fg="white",activebackground="#1d4ed8",relief="flat",width=6).grid(row=0,column=5,padx=2)
+tk.Button(input_frame,text="คลุมดำ", command=direct_select_all,bg="#7c3aed",fg="white",activebackground="#6d28d9",relief="flat",width=6).grid(row=0,column=6,padx=2)
+tk.Button(input_frame,text="บันทึก",command=cmd_add,bg="#059669",fg="white",activebackground="#047857",relief="flat",width=8).grid(row=0,column=7,padx=5)
 
 # --- Treeview + Action Buttons ---
 tree_frame = tk.Frame(root); tree_frame.pack(fill="both",expand=True,padx=20)
