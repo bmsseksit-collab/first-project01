@@ -115,6 +115,50 @@ def send_unicode_char(ch):
         _send_unicode_code_unit(unit)
 
 
+def send_unicode_text(text):
+    if not text:
+        return
+    if os.name != "nt":
+        kb_controller.type(text)
+        return
+
+    PUL = ctypes.POINTER(ctypes.c_ulong)
+
+    class KeyBdInput(ctypes.Structure):
+        _fields_ = [
+            ("wVk", ctypes.c_ushort),
+            ("wScan", ctypes.c_ushort),
+            ("dwFlags", ctypes.c_ulong),
+            ("time", ctypes.c_ulong),
+            ("dwExtraInfo", PUL),
+        ]
+
+    class Input_I(ctypes.Union):
+        _fields_ = [("ki", KeyBdInput)]
+
+    class Input(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_ulong), ("ii", Input_I)]
+
+    INPUT_KEYBOARD = 1
+    KEYEVENTF_UNICODE = 0x0004
+    KEYEVENTF_KEYUP = 0x0002
+
+    extra = ctypes.c_ulong(0)
+    encoded = text.encode("utf-16-le")
+    units = [int.from_bytes(encoded[i:i + 2], "little") for i in range(0, len(encoded), 2)]
+    inputs = []
+    for unit in units:
+        down_union = Input_I()
+        down_union.ki = KeyBdInput(0, unit, KEYEVENTF_UNICODE, 0, ctypes.pointer(extra))
+        up_union = Input_I()
+        up_union.ki = KeyBdInput(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
+        inputs.append(Input(INPUT_KEYBOARD, down_union))
+        inputs.append(Input(INPUT_KEYBOARD, up_union))
+
+    arr = (Input * len(inputs))(*inputs)
+    ctypes.windll.user32.SendInput(len(arr), ctypes.byref(arr), ctypes.sizeof(Input))
+
+
 # --- Background execution ---
 def execute_action(shortcut, text):
     try:
@@ -123,12 +167,11 @@ def execute_action(shortcut, text):
         for _ in range(len(shortcut)):
             kb_controller.press(keyboard.Key.backspace)
             kb_controller.release(keyboard.Key.backspace)
-            time.sleep(0.001)
+            time.sleep(0.003)
         time.sleep(0.01)
         lines = text.split("\n")
         for idx, line in enumerate(lines):
-            for ch in line:
-                send_unicode_char(ch)
+            send_unicode_text(line)
             if idx < len(lines) - 1:
                 kb_controller.press(keyboard.Key.shift)
                 kb_controller.press(keyboard.Key.enter)
