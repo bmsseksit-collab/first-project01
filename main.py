@@ -64,27 +64,48 @@ def send_unicode_char(ch):
         kb_controller.type(ch)
         return
 
-    class KEYBDINPUT(ctypes.Structure):
+    PUL = ctypes.POINTER(ctypes.c_ulong)
+
+    class KeyBdInput(ctypes.Structure):
         _fields_ = [
             ("wVk", ctypes.c_ushort),
             ("wScan", ctypes.c_ushort),
             ("dwFlags", ctypes.c_ulong),
             ("time", ctypes.c_ulong),
-            ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+            ("dwExtraInfo", PUL),
         ]
 
-    class INPUT(ctypes.Structure):
-        _fields_ = [("type", ctypes.c_ulong), ("ki", KEYBDINPUT)]
+    class HardwareInput(ctypes.Structure):
+        _fields_ = [("uMsg", ctypes.c_ulong), ("wParamL", ctypes.c_short), ("wParamH", ctypes.c_ushort)]
+
+    class MouseInput(ctypes.Structure):
+        _fields_ = [
+            ("dx", ctypes.c_long), ("dy", ctypes.c_long), ("mouseData", ctypes.c_ulong),
+            ("dwFlags", ctypes.c_ulong), ("time", ctypes.c_ulong), ("dwExtraInfo", PUL)
+        ]
+
+    class Input_I(ctypes.Union):
+        _fields_ = [("ki", KeyBdInput), ("mi", MouseInput), ("hi", HardwareInput)]
+
+    class Input(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_ulong), ("ii", Input_I)]
 
     INPUT_KEYBOARD = 1
     KEYEVENTF_UNICODE = 0x0004
     KEYEVENTF_KEYUP = 0x0002
 
-    code = ord(ch)
-    down = INPUT(INPUT_KEYBOARD, KEYBDINPUT(0, code, KEYEVENTF_UNICODE, 0, None))
-    up = INPUT(INPUT_KEYBOARD, KEYBDINPUT(0, code, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, None))
-    ctypes.windll.user32.SendInput(1, ctypes.byref(down), ctypes.sizeof(INPUT))
-    ctypes.windll.user32.SendInput(1, ctypes.byref(up), ctypes.sizeof(INPUT))
+    extra = ctypes.c_ulong(0)
+    union_down = Input_I()
+    union_down.ki = KeyBdInput(0, ord(ch), KEYEVENTF_UNICODE, 0, ctypes.pointer(extra))
+    union_up = Input_I()
+    union_up.ki = KeyBdInput(0, ord(ch), KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
+
+    x = Input(INPUT_KEYBOARD, union_down)
+    y = Input(INPUT_KEYBOARD, union_up)
+
+    ctypes.windll.user32.SendInput(1, ctypes.byref(x), ctypes.sizeof(x))
+    ctypes.windll.user32.SendInput(1, ctypes.byref(y), ctypes.sizeof(y))
+
 
 # --- Background execution ---
 def execute_action(shortcut, text):
