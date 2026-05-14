@@ -280,6 +280,7 @@ def paste_text_fast(text):
     kb_controller.release('v')
     kb_controller.release(keyboard.Key.ctrl)
     return True
+
 # --- Background execution ---
 def execute_action(shortcut, text):
     try:
@@ -372,26 +373,16 @@ def on_press(key):
             if 65 <= key.vk <= 90:
                 char = chr(key.vk + 32)
             elif 48 <= key.vk <= 57:
-                char = str(key.vk - 48)      # แถวบน
+                char = str(key.vk - 48)
             elif 96 <= key.vk <= 105:
-                char = f"num{key.vk - 96}"   # Num0..Num9
-            elif key.vk == 111:
-                char = "num/"
-            elif key.vk == 106:
-                char = "num*"
-            elif key.vk == 109:
-                char = "num-"
-            elif key.vk == 107:
-                char = "num+"
+                char = f"num{key.vk - 96}"
             elif key.vk == 110:
-                char = "num."
-            elif key.vk == 190:
                 char = "."
-            elif key.vk == 191:
-                char = "/"
+
+        if char == "ใ": char = "."
 
         current_key = char
-        
+
         def can_trigger(shortcut_key):
             nonlocal current_time
             global last_triggered_shortcut, last_trigger_time
@@ -415,7 +406,7 @@ def on_press(key):
             ordered_shortcuts = sorted(shortcuts.items(), key=lambda kv: len(kv[0]), reverse=True)
             for k, v in ordered_shortcuts:
                 if current_keys.endswith(normalize_shortcut_sequence(k)):
-                     if can_trigger(k):
+                    if can_trigger(k):
                         current_keys = ""
                         task_queue.put((k, v))
                         break
@@ -476,26 +467,6 @@ def cmd_delete():
         shortcuts.pop(k, None)
     save_data()
     refresh_table()
-
-def cmd_export():
-    f = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON","*.json")])
-    if f:
-        with open(f,'w',encoding='utf-8') as file:
-            json.dump(shortcuts, file, ensure_ascii=False, indent=4)
-
-def cmd_import():
-    f = filedialog.askopenfilename(filetypes=[("JSON","*.json")])
-    if f:
-        with open(f,'r',encoding='utf-8-sig') as file:
-            shortcuts.update(json.load(file))
-        save_data()
-        refresh_table()
-
-def refresh_table():
-    for i in tree.get_children():
-        tree.delete(i)
-    for k,v in shortcuts.items():
-        tree.insert("",tk.END,values=("☐",k,v))
 
 def on_tree_select(event):
     sel = tree.selection()
@@ -733,6 +704,10 @@ animate_cat()
 # --- Start ---
 load_data()
 check_focus_loop()
-listener = keyboard.Listener(on_press=on_press,on_release=on_release)
+listener = keyboard.Listener(
+    on_press=on_press,
+    on_release=on_release,
+    win32_event_filter=win32_filter
+)
 listener.start()
 root.mainloop()
