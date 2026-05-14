@@ -41,6 +41,9 @@ def win32_filter(msg, data):
         vk = getattr(data, "vkCode", None)
         if vk is None:
             return
+        # ดักเฉพาะตอน key down เท่านั้น
+        if msg not in (0x100, 0x104):
+            return
         # 0x31..0x39 = 1..9
         if 0x31 <= vk <= 0x39:
             ctrl_pressed = bool(ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000)
@@ -49,13 +52,11 @@ def win32_filter(msg, data):
             key_num = str(vk - 0x30)
             hotkey_name = f"ctrl+{key_num}"
             if hotkey_name in shortcuts and is_running and not app_has_focus:
-                try:
-                    listener.suppress_event()
-                except Exception:
-                    pass
                 task_queue.put((hotkey_name, shortcuts[hotkey_name]))
+                return False
     except Exception:
         pass
+
 # --- Load/Save ---
 def load_data():
     global shortcuts
@@ -84,6 +85,27 @@ def parse_hotkey(text):
         else:
             key = p
     return tuple(mods), key
+
+
+def normalize_sequence_token(token):
+    token = token.lower()
+    num_map = {
+        "num/": "/", "num*": "*", "num-": "-", "num+": "+", "num.": ".",
+        "num0": "0", "num1": "1", "num2": "2", "num3": "3", "num4": "4",
+        "num5": "5", "num6": "6", "num7": "7", "num8": "8", "num9": "9",
+    }
+    return num_map.get(token, token)
+
+
+def normalize_shortcut_sequence(text):
+    out = text.lower()
+    for k, v in {
+        "num/": "/", "num*": "*", "num-": "-", "num+": "+", "num.": ".",
+        "num0": "0", "num1": "1", "num2": "2", "num3": "3", "num4": "4",
+        "num5": "5", "num6": "6", "num7": "7", "num8": "8", "num9": "9",
+    }.items():
+        out = out.replace(k, v)
+    return out
 
 
 
@@ -258,7 +280,6 @@ def paste_text_fast(text):
     kb_controller.release('v')
     kb_controller.release(keyboard.Key.ctrl)
     return True
-
 # --- Background execution ---
 def execute_action(shortcut, text):
     try:
@@ -390,10 +411,10 @@ def on_press(key):
                     return
 
         if char:
-            current_keys += char
+            current_keys += normalize_sequence_token(char)
             ordered_shortcuts = sorted(shortcuts.items(), key=lambda kv: len(kv[0]), reverse=True)
             for k, v in ordered_shortcuts:
-                if current_keys.endswith(k):
+                if current_keys.endswith(normalize_shortcut_sequence(k)):
                      if can_trigger(k):
                         current_keys = ""
                         task_queue.put((k, v))
