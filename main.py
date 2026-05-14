@@ -6,6 +6,7 @@ import time
 import os
 import threading
 import queue
+import ctypes
 from PIL import Image, ImageDraw, ImageTk
 import pystray
 from pystray import MenuItem as item
@@ -56,6 +57,35 @@ def parse_hotkey(text):
             key = p
     return tuple(mods), key
 
+
+
+def send_unicode_char(ch):
+    if os.name != "nt":
+        kb_controller.type(ch)
+        return
+
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [
+            ("wVk", ctypes.c_ushort),
+            ("wScan", ctypes.c_ushort),
+            ("dwFlags", ctypes.c_ulong),
+            ("time", ctypes.c_ulong),
+            ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+        ]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_ulong), ("ki", KEYBDINPUT)]
+
+    INPUT_KEYBOARD = 1
+    KEYEVENTF_UNICODE = 0x0004
+    KEYEVENTF_KEYUP = 0x0002
+
+    code = ord(ch)
+    down = INPUT(INPUT_KEYBOARD, KEYBDINPUT(0, code, KEYEVENTF_UNICODE, 0, None))
+    up = INPUT(INPUT_KEYBOARD, KEYBDINPUT(0, code, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, None))
+    ctypes.windll.user32.SendInput(1, ctypes.byref(down), ctypes.sizeof(INPUT))
+    ctypes.windll.user32.SendInput(1, ctypes.byref(up), ctypes.sizeof(INPUT))
+
 # --- Background execution ---
 def execute_action(shortcut, text):
     try:
@@ -65,15 +95,15 @@ def execute_action(shortcut, text):
             kb_controller.press(keyboard.Key.backspace)
             kb_controller.release(keyboard.Key.backspace)
             time.sleep(0.01)
-        time.sleep(0.05)
-        for ch in text:
-            if ch == "\n":
+        lines = text.split("\n")
+        for idx, line in enumerate(lines):
+            for ch in line:
+                send_unicode_char(ch)
+            if idx < len(lines) - 1:
                 kb_controller.press(keyboard.Key.shift)
                 kb_controller.press(keyboard.Key.enter)
                 kb_controller.release(keyboard.Key.enter)
                 kb_controller.release(keyboard.Key.shift)
-            else:
-                kb_controller.type(ch)
     except Exception as e:
         print(f"Error: {e}")
 
