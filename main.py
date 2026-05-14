@@ -180,15 +180,25 @@ def paste_text_fast(text):
     ctypes.memmove(ptr, raw, len(raw))
     kernel32.GlobalUnlock(h_global)
 
-    if user32.OpenClipboard(None):
-        user32.EmptyClipboard()
-        user32.SetClipboardData(CF_UNICODETEXT, h_global)
-        user32.CloseClipboard()
+    opened = False
+    for _ in range(10):
+        if user32.OpenClipboard(None):
+            opened = True
+            break
+        time.sleep(0.01)
+
+    if not opened:
+        return False
+
+    user32.EmptyClipboard()
+    user32.SetClipboardData(CF_UNICODETEXT, h_global)
+    user32.CloseClipboard()
 
     kb_controller.press(keyboard.Key.ctrl)
     kb_controller.press('v')
     kb_controller.release('v')
     kb_controller.release(keyboard.Key.ctrl)
+    return True
 
 # --- Background execution ---
 def execute_action(shortcut, text):
@@ -200,7 +210,17 @@ def execute_action(shortcut, text):
             kb_controller.release(keyboard.Key.backspace)
             time.sleep(0.001)
         time.sleep(0.003)
-        paste_text_fast(text)
+        if not paste_text_fast(text):
+            lines = text.split("\n")
+            for idx, line in enumerate(lines):
+                for ch in line:
+                    send_unicode_char(ch)
+                    time.sleep(0.001)
+                if idx < len(lines) - 1:
+                    kb_controller.press(keyboard.Key.shift)
+                    kb_controller.press(keyboard.Key.enter)
+                    kb_controller.release(keyboard.Key.enter)
+                    kb_controller.release(keyboard.Key.shift)
     except Exception as e:
         print(f"Error: {e}")
 
