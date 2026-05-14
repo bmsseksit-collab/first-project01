@@ -159,6 +159,37 @@ def send_unicode_text(text):
     ctypes.windll.user32.SendInput(len(arr), arr, ctypes.sizeof(Input))
 
 
+
+
+def paste_text_fast(text):
+    # เร็วและแม่นสุด: วางทั้งก้อนผ่าน clipboard แล้วกด Ctrl+V
+    if os.name != "nt":
+        kb_controller.type(text)
+        return
+
+    CF_UNICODETEXT = 13
+    GMEM_MOVEABLE = 0x0002
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+
+    data = text.replace("\n", "\r\n") + "\x00"
+    raw = data.encode("utf-16-le")
+
+    h_global = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(raw))
+    ptr = kernel32.GlobalLock(h_global)
+    ctypes.memmove(ptr, raw, len(raw))
+    kernel32.GlobalUnlock(h_global)
+
+    if user32.OpenClipboard(None):
+        user32.EmptyClipboard()
+        user32.SetClipboardData(CF_UNICODETEXT, h_global)
+        user32.CloseClipboard()
+
+    kb_controller.press(keyboard.Key.ctrl)
+    kb_controller.press('v')
+    kb_controller.release('v')
+    kb_controller.release(keyboard.Key.ctrl)
+
 # --- Background execution ---
 def execute_action(shortcut, text):
     try:
@@ -167,17 +198,9 @@ def execute_action(shortcut, text):
         for _ in range(len(shortcut)):
             kb_controller.press(keyboard.Key.backspace)
             kb_controller.release(keyboard.Key.backspace)
-            time.sleep(0.003)
-        time.sleep(0.01)
-        lines = text.split("\n")
-        for idx, line in enumerate(lines):
-            for ch in line:
-                send_unicode_char(ch)
-            if idx < len(lines) - 1:
-                kb_controller.press(keyboard.Key.shift)
-                kb_controller.press(keyboard.Key.enter)
-                kb_controller.release(keyboard.Key.enter)
-                kb_controller.release(keyboard.Key.shift)
+            time.sleep(0.001)
+        time.sleep(0.003)
+        paste_text_fast(text)
     except Exception as e:
         print(f"Error: {e}")
 
