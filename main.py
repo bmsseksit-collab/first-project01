@@ -351,15 +351,23 @@ def on_press(key):
             if 65 <= key.vk <= 90:
                 char = chr(key.vk + 32)
             elif 48 <= key.vk <= 57:
-                char = str(key.vk - 48)
+                char = str(key.vk - 48)      # แถวบน
             elif 96 <= key.vk <= 105:
-                char = str(key.vk - 96)
+                char = f"num{key.vk - 96}"   # Num0..Num9
+            elif key.vk == 111:
+                char = "num/"
+            elif key.vk == 106:
+                char = "num*"
+            elif key.vk == 109:
+                char = "num-"
+            elif key.vk == 107:
+                char = "num+"
             elif key.vk == 110:
+                char = "num."
+            elif key.vk == 190:
                 char = "."
-            elif key.vk in (191, 111):   # / และ numpad /
+            elif key.vk == 191:
                 char = "/"
-
-        if char == "ใ": char = "."
 
         current_key = char
         
