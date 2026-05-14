@@ -59,9 +59,9 @@ def parse_hotkey(text):
 
 
 
-def send_unicode_char(ch):
+def _send_unicode_code_unit(unit):
     if os.name != "nt":
-        kb_controller.type(ch)
+        kb_controller.type(chr(unit))
         return
 
     PUL = ctypes.POINTER(ctypes.c_ulong)
@@ -96,15 +96,23 @@ def send_unicode_char(ch):
 
     extra = ctypes.c_ulong(0)
     union_down = Input_I()
-    union_down.ki = KeyBdInput(0, ord(ch), KEYEVENTF_UNICODE, 0, ctypes.pointer(extra))
+    union_down.ki = KeyBdInput(0, unit, KEYEVENTF_UNICODE, 0, ctypes.pointer(extra))
     union_up = Input_I()
-    union_up.ki = KeyBdInput(0, ord(ch), KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
+    union_up.ki = KeyBdInput(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, ctypes.pointer(extra))
 
     x = Input(INPUT_KEYBOARD, union_down)
     y = Input(INPUT_KEYBOARD, union_up)
 
     ctypes.windll.user32.SendInput(1, ctypes.byref(x), ctypes.sizeof(x))
     ctypes.windll.user32.SendInput(1, ctypes.byref(y), ctypes.sizeof(y))
+
+
+def send_unicode_char(ch):
+    # รองรับ emoji / ตัวอักษรนอก BMP ด้วยการส่ง UTF-16 surrogate pairs
+    encoded = ch.encode("utf-16-le")
+    units = [int.from_bytes(encoded[i:i + 2], "little") for i in range(0, len(encoded), 2)]
+    for unit in units:
+        _send_unicode_code_unit(unit)
 
 
 # --- Background execution ---
@@ -115,7 +123,8 @@ def execute_action(shortcut, text):
         for _ in range(len(shortcut)):
             kb_controller.press(keyboard.Key.backspace)
             kb_controller.release(keyboard.Key.backspace)
-            time.sleep(0.01)
+            time.sleep(0.001)
+        time.sleep(0.01)
         lines = text.split("\n")
         for idx, line in enumerate(lines):
             for ch in line:
@@ -180,6 +189,8 @@ def on_press(key):
         elif hasattr(key, 'vk'):
             if 65 <= key.vk <= 90:
                 char = chr(key.vk + 32)
+            elif 48 <= key.vk <= 57:
+                char = str(key.vk - 48)
             elif 96 <= key.vk <= 105:
                 char = str(key.vk - 96)
             elif key.vk == 110:
